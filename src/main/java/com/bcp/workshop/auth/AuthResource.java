@@ -19,6 +19,9 @@ public class AuthResource {
     @Inject
     LegacyDatabase database;
 
+    @Inject
+    SignedTokenIssuer tokenIssuer;
+
     @POST
     @Path("/login")
     public Response login(LoginRequest request) {
@@ -32,14 +35,17 @@ public class AuthResource {
                     if (request.password == null || request.password.trim().isEmpty()) {
                         return Response.status(400).entity(Map.of("message", "Password is required")).build();
                     } else {
+                        if (request.client == null || request.client.isBlank()) {
+                            return Response.status(400).entity(Map.of("message", "Client is required")).build();
+                        }
                         UserRecord user = database.findByCredentials(request.username, request.password);
                         if (user == null) {
                             return Response.status(401).entity(Map.of("message", "Invalid user " + request.username + " or password")).build();
                         } else {
-                            String token = LegacyTokenUtil.create(user.username(), user.role());
+                            SignedTokenIssuer.IssuedToken issued = tokenIssuer.issue(user, request.client);
                             Map<String, Object> response = new HashMap<>();
-                            response.put("token", token);
-                            response.put("expiresIn", 3600);
+                            response.put("token", issued.token());
+                            response.put("expiresIn", issued.expiresIn());
                             response.put("user", Map.of(
                                     "username", user.username(),
                                     "displayName", StringEscapeUtils.escapeHtml4(user.displayName()),
